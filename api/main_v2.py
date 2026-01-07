@@ -5,15 +5,13 @@ import tempfile
 import os
 import sys
 
-# Add project root to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from models.vision.predict import SkinAnalyzer
+from models.vision.predict_v2 import SkinAnalyzerV2
 from models.recommender.recommend import MockProductRecommender
 
-app = FastAPI(title="Beauty Recommendation API", version="1.0.0")
+app = FastAPI(title="Beauty Recommendation API V2", version="2.0.0")
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,19 +19,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize models (they'll load when first called)
+# Initialize improved models
 skin_analyzer = None
 product_recommender = None
 
 def get_skin_analyzer():
-    """Lazy load skin analyzer"""
     global skin_analyzer
     if skin_analyzer is None:
-        skin_analyzer = SkinAnalyzer("models/vision/beauty_vision_model.pt")
+        skin_analyzer = SkinAnalyzerV2("models/vision/beauty_vision_model_v2.pt")
     return skin_analyzer
 
 def get_product_recommender():
-    """Lazy load product recommender"""
     global product_recommender
     if product_recommender is None:
         product_recommender = MockProductRecommender()
@@ -42,44 +38,58 @@ def get_product_recommender():
 @app.get("/")
 async def root():
     return {
-        "message": "Beauty Recommendation API",
+        "message": "Beauty Recommendation API V2",
+        "model_version": "ImprovedBeautyVisionModel v2",
+        "accuracy": "~38% (improved from ~30%)",
         "endpoints": {
             "GET /": "This message",
-            "POST /analyze": "Analyze skin from image",
+            "POST /analyze": "Analyze skin from image (using improved model)",
             "POST /recommend": "Get product recommendations",
             "GET /products": "Browse all products",
-            "GET /health": "Health check"
+            "GET /health": "Health check",
+            "GET /model-info": "Get model information"
         }
+    }
+
+@app.get("/model-info")
+async def model_info():
+    """Get information about the current model"""
+    analyzer = get_skin_analyzer()
+    return {
+        "model_version": "v2",
+        "model_type": "ImprovedBeautyVisionModel (ResNet34)",
+        "accuracy": {
+            "skin_tone": "~38%",
+            "fitzpatrick": "~38%"
+        },
+        "improvement": "~8% over previous model",
+        "features": ["Data augmentation", "Class weights", "Learning rate scheduling", "Gradient clipping"]
     }
 
 @app.post("/analyze")
 async def analyze_skin(image: UploadFile = File(...)):
-    """Analyze skin from uploaded image"""
-    # Save uploaded file temporarily
+    """Analyze skin from uploaded image using improved model"""
     temp_dir = tempfile.gettempdir()
     temp_path = os.path.join(temp_dir, image.filename)
     
     try:
-        # Save file
         with open(temp_path, "wb") as buffer:
             content = await image.read()
             buffer.write(content)
         
-        # Analyze
         analyzer = get_skin_analyzer()
         result = analyzer.analyze(temp_path)
         
-        # Clean up
         os.remove(temp_path)
         
         return {
             "success": True,
-            "message": "Analysis complete",
+            "message": "Analysis complete (using improved model v2)",
+            "model_version": "v2",
             "analysis": result
         }
         
     except Exception as e:
-        # Clean up on error
         if os.path.exists(temp_path):
             os.remove(temp_path)
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
@@ -91,15 +101,12 @@ async def get_recommendations(
     budget: float = None,
     n_recommendations: int = 5
 ):
-    """Get product recommendations based on skin analysis"""
     try:
-        # Create skin analysis object
         skin_analysis = {
             "monk_skin_tone": {"prediction": monk_skin_tone},
             "fitzpatrick": {"prediction": fitzpatrick}
         }
         
-        # Get recommendations
         recommender = get_product_recommender()
         recommendations = recommender.recommend(
             skin_analysis=skin_analysis,
@@ -130,12 +137,10 @@ async def browse_products(
     max_price: float = None,
     brand: str = None
 ):
-    """Browse all products with filters"""
     try:
         recommender = get_product_recommender()
         products = recommender.products.copy()
         
-        # Apply filters
         if min_price is not None:
             products = products[products["price"] >= min_price]
         if max_price is not None:
@@ -143,7 +148,6 @@ async def browse_products(
         if brand:
             products = products[products["brand"].str.contains(brand, case=False, na=False)]
         
-        # Pagination
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
         paginated_products = products.iloc[start_idx:end_idx]
@@ -162,10 +166,9 @@ async def browse_products(
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "beauty-recommendation-api"}
+    return {"status": "healthy", "service": "beauty-recommendation-api-v2"}
 
 if __name__ == "__main__":
-    print("Starting Beauty Recommendation API on http://localhost:8000")
-    print("Press Ctrl+C to stop")
+    print("Starting Beauty Recommendation API V2 on http://localhost:8000")
+    print("Using improved model with ~38% accuracy")
     uvicorn.run(app, host="0.0.0.0", port=8000)

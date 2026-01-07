@@ -1,0 +1,6 @@
+{
+  "skin_accuracy": 0.37834691501746215,
+  "fitz_accuracy": 0.3841676367869616,
+  "best_val_acc": 0.7625145518044237,
+  "best_epoch": 15
+}
